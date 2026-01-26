@@ -115,9 +115,24 @@ If you prefer to build from source or the pre-built binary for your platform is 
 
 ### Starting the Tool
 
+You can start the tool in two ways:
+
+**Interactive mode** (no arguments):
+
 ```bash
-go run main.go
+cocli
 ```
+
+**With an initial prompt** (one or more arguments):
+
+```bash
+# With or without quotes - both work!
+cocli What is the capital of France
+cocli "What is the capital of France"
+cocli Write a function that calculates fibonacci numbers
+```
+
+All arguments are concatenated with spaces to form the prompt. The tool will process your prompt and then enter interactive mode for follow-up questions.
 
 The tool will start and display a prompt with the current model and token information:
 
@@ -129,7 +144,7 @@ The tool will start and display a prompt with the current model and token inform
 
 #### Chat with AI
 
-Simply type your prompt and press Enter:
+Simply type your prompt and press Enter (or pass it as arguments):
 
 ```
 [gpt-4.1 | 4000/4000 tokens] > What is the capital of France?

@@ -43,19 +43,34 @@ func main() {
 
 	reader := bufio.NewReader(os.Stdin)
 
+	// Check if a prompt was provided as a command-line argument
+	var initialPrompt string
+	if len(os.Args) > 1 {
+		initialPrompt = strings.Join(os.Args[1:], " ")
+	}
+
 	// Interactive loop
 	for {
-		// Display prompt with tokens if available
-		if sessionMgr.HasTokenLimit() {
-			fmt.Printf("[%s | %d/%d tokens] > ", selectedModel, sessionMgr.GetTokensLeft(), sessionMgr.TokenLimit)
+		var prompt string
+		var err error
+
+		// Use initial prompt if provided, otherwise read from stdin
+		if initialPrompt != "" {
+			prompt = initialPrompt
+			initialPrompt = "" // Clear it so we only use it once
 		} else {
-			fmt.Printf("[%s] > ", selectedModel)
+			// Display prompt with tokens if available
+			if sessionMgr.HasTokenLimit() {
+				fmt.Printf("[%s | %d/%d tokens] > ", selectedModel, sessionMgr.GetTokensLeft(), sessionMgr.TokenLimit)
+			} else {
+				fmt.Printf("[%s] > ", selectedModel)
+			}
+			prompt, err = reader.ReadString('\n')
+			if err != nil {
+				log.Fatal(err)
+			}
+			prompt = strings.TrimSpace(prompt)
 		}
-		prompt, err := reader.ReadString('\n')
-		if err != nil {
-			log.Fatal(err)
-		}
-		prompt = strings.TrimSpace(prompt)
 
 		// Handle slash commands
 		if strings.HasPrefix(prompt, "/") {
