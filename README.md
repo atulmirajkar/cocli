@@ -126,13 +126,29 @@ cocli
 **With an initial prompt** (one or more arguments):
 
 ```bash
-# With or without quotes - both work!
+# Simple queries
 cocli What is the capital of France
-cocli "What is the capital of France"
 cocli Write a function that calculates fibonacci numbers
 ```
 
 All arguments are concatenated with spaces to form the prompt. The tool will process your prompt and then enter interactive mode for follow-up questions.
+
+#### Note on Special Characters
+
+When using command-line arguments, shell special characters like `?`, `*`, `&`, `|`, `$`, and backticks may be interpreted by your shell. **Always use quotes for queries with special characters:**
+
+```bash
+# ✓ Correct - Use quotes for safety
+cocli "Does this pattern match: *.txt?"
+cocli "Check if x > 5 && y < 10"
+cocli "What's the regex for emails?"
+
+# ✗ Avoid without quotes - shell may expand these
+cocli Does this pattern match: *.txt?
+cocli Check if x > 5 && y < 10
+```
+
+**Best practice**: Quote your entire prompt if it contains any special characters.
 
 The tool will start and display a prompt with the current model and token information:
 
