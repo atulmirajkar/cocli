@@ -1,6 +1,6 @@
 # CoCli
 
-An interactive Go CLI tool for testing the GitHub Copilot SDK. This tool allows you to have conversations with different AI models, track token usage, and switch between models seamlessly.
+An interactive Go CLI tool for quick question answer mode in the cli. This is build using GitHub Copilot SDK. This tool allows you to have conversations with different AI models, track token usage, and switch between models seamlessly.
 
 ## Features
 
@@ -9,8 +9,6 @@ An interactive Go CLI tool for testing the GitHub Copilot SDK. This tool allows 
 - **Token Tracking** - Monitor token usage during conversations
 - **Model Persistence** - Maintains the current model throughout the session
 - **Graceful Shutdown** - Press Ctrl+C to exit cleanly
-
-## Prerequisites
 
 ## Prerequisites
 
@@ -31,37 +29,37 @@ An interactive Go CLI tool for testing the GitHub Copilot SDK. This tool allows 
 
 2. **Download the binary**:
 
-    ````bash
+    ```bash
     # For Apple Silicon (M1/M2/M3)
     curl -L https://raw.githubusercontent.com/atulmirajkar/cocli/main/releases/cocli-darwin-arm64 -o cocli
     chmod +x cocli
 
     # For Intel Mac
     curl -L https://raw.githubusercontent.com/atulmirajkar/cocli/main/releases/cocli-darwin-amd64 -o cocli
-    ```bash
+    chmod +x cocli
+
     ./cocli
-    ````
+    ```
 
 #### Linux
 
 1. **Install GitHub Copilot CLI**:
 
-    ```bash
-    # Follow instructions at https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli
-    ```
+    Follow instructions at https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli
 
 2. **Download the binary**:
 
-    ````bash
+    ```bash
     # For x86_64
     curl -L https://raw.githubusercontent.com/atulmirajkar/cocli/main/releases/cocli-linux-amd64 -o cocli
     chmod +x cocli
 
     # For ARM64 (Raspberry Pi, etc.)
     curl -L https://raw.githubusercontent.com/atulmirajkar/cocli/main/releases/cocli-linux-arm64 -o cocli
-    ```bash
+    chmod +x cocli
+
     ./cocli
-    ````
+    ```
 
 ### Build from Source
 
@@ -82,15 +80,15 @@ If you prefer to build from source or the pre-built binary for your platform is 
 2. **Clone the repository**:
 
     ```bash
-    git clone <repository-url>
-    cd copilot-sdk-play
+    git clone git@github.com:atulmirajkar/cocli.git
+    cd cocli
     ```
 
 3. **Install dependencies and build**:
     ```bash
     go mod download
-    go build -o copilot-play
-    ./copilot-play
+    go build -o cocli
+    ./cocli
     ```
 
 #### Linux
@@ -102,7 +100,7 @@ If you prefer to build from source or the pre-built binary for your platform is 
 2. **Clone the repository**:
 
     ```bash
-    git clone <repository-url>
+    git clone git@github.com:atulmirajkar/cocli.git
     cd cocli
     ```
 
