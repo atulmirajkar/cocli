@@ -2,28 +2,84 @@ package session
 
 import (
 	"fmt"
+	"time"
 
 	copilot "github.com/github/copilot-sdk/go"
 )
 
-// Manager handles session creation and lifecycle
-type Manager struct {
-	client        *copilot.Client
-	session       *copilot.Session
-	CurrentTokens int64
-	TokenLimit    int64
+// ClientInterface defines the interface for copilot client operations
+type ClientInterface interface {
+	CreateSession(*copilot.SessionConfig) (SessionInterface, error)
+	ListModels() ([]copilot.ModelInfo, error)
+	Start() error
+	Stop() []error
 }
 
-// NewManager creates a new session manager and initializes the client
+// SessionInterface defines the interface for session operations
+type SessionInterface interface {
+	On(copilot.SessionEventHandler) func()
+	SendAndWait(copilot.MessageOptions, time.Duration) (*copilot.SessionEvent, error)
+}
+
+// copilotClient wraps the actual copilot.Client to implement ClientInterface
+type copilotClient struct {
+	*copilot.Client
+}
+
+func (r *copilotClient) CreateSession(config *copilot.SessionConfig) (SessionInterface, error) {
+	session, err := r.Client.CreateSession(config)
+	if err != nil {
+		return nil, err
+	}
+	return &copilotSession{session}, nil
+}
+
+// copilotSession wraps the actual copilot.Session to implement SessionInterface
+type copilotSession struct {
+	*copilot.Session
+}
+
+// Manager handles session creation and lifecycle
+type Manager struct {
+	client            ClientInterface
+	session           SessionInterface
+	currentTokens     int64
+	tokenLimit        int64
+	currentModel      string
+	currentMultiplier float64
+	models            []copilot.ModelInfo
+}
+
+// NewManager creates a new session manager and initializes the client with default model
 func NewManager() (*Manager, error) {
 	client := copilot.NewClient(nil)
 	if err := client.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start client: %w", err)
 	}
 
+	mgr := &Manager{
+		client:            &copilotClient{client},
+		currentModel:      "Claude Haiku 4.5",
+		currentMultiplier: 0,
+		models:            []copilot.ModelInfo{},
+	}
+
+	// Create initial session with default model
+	if err := mgr.Create(mgr.currentModel); err != nil {
+		return nil, fmt.Errorf("failed to create initial session: %w", err)
+	}
+
+	return mgr, nil
+}
+
+// NewManagerWithClient creates a manager with a custom client (for testing)
+func NewManagerWithClient(client ClientInterface) *Manager {
 	return &Manager{
-		client: client,
-	}, nil
+		client:            client,
+		currentModel:      "Claude Haiku 4.5",
+		currentMultiplier: 0,
+		models:            []copilot.ModelInfo{},
+	}
 }
 
 // Create creates a new session with the given model and sets up event handlers
@@ -37,8 +93,8 @@ func (m *Manager) Create(model string) error {
 	}
 
 	m.session = session
-	m.CurrentTokens = 0
-	m.TokenLimit = 0
+	m.currentTokens = 0
+	m.tokenLimit = 0
 
 	// Set up event listeners
 	m.setupEventHandlers()
@@ -59,10 +115,10 @@ func (m *Manager) setupEventHandlers() {
 
 		// Update token counts from events
 		if event.Data.CurrentTokens != nil {
-			m.CurrentTokens = int64(*event.Data.CurrentTokens)
+			m.currentTokens = int64(*event.Data.CurrentTokens)
 		}
 		if event.Data.TokenLimit != nil {
-			m.TokenLimit = int64(*event.Data.TokenLimit)
+			m.tokenLimit = int64(*event.Data.TokenLimit)
 		}
 	})
 }
@@ -83,19 +139,78 @@ func (m *Manager) Send(prompt string) error {
 	return nil
 }
 
+// GetModels returns cached models, fetching from server if needed
+func (m *Manager) GetModels() ([]copilot.ModelInfo, error) {
+	if len(m.models) == 0 {
+		fmt.Println("Fetching available models from server...")
+		var err error
+		m.models, err = m.client.ListModels()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return m.models, nil
+}
+
+// DisplayModels prints the list of available models with billing info
+func (m *Manager) DisplayModels() error {
+	if len(m.models) == 0 {
+		return fmt.Errorf("no models available")
+	}
+
+	fmt.Println("\nAvailable models:")
+	for i, model := range m.models {
+		prefix := "  "
+		if model.ID == m.currentModel {
+			prefix = "* "
+		}
+		billingInfo := ""
+		if model.Billing != nil {
+			billingInfo = fmt.Sprintf(" (%.2fx)", model.Billing.Multiplier)
+		}
+		fmt.Printf("%s%d. %s (ID: %s)%s\n", prefix, i+1, model.Name, model.ID, billingInfo)
+	}
+	return nil
+}
+
 // ListModels returns available models from the server
 func (m *Manager) ListModels() ([]copilot.ModelInfo, error) {
 	return m.client.ListModels()
 }
 
+// SetModel switches to a new model with the given billing multiplier and creates a new session
+func (m *Manager) SetModel(modelID string, multiplier float64) error {
+	if err := m.Create(modelID); err != nil {
+		return err
+	}
+	m.currentModel = modelID
+	m.currentMultiplier = multiplier
+	return nil
+}
+
+// GetCurrentModel returns the ID of the currently selected model
+func (m *Manager) GetCurrentModel() string {
+	return m.currentModel
+}
+
+// GetCurrentMultiplier returns the billing multiplier of the currently selected model
+func (m *Manager) GetCurrentMultiplier() float64 {
+	return m.currentMultiplier
+}
+
 // GetTokensLeft returns the number of tokens remaining
 func (m *Manager) GetTokensLeft() int64 {
-	return m.TokenLimit - m.CurrentTokens
+	return m.tokenLimit - m.currentTokens
 }
 
 // HasTokenLimit returns whether a token limit is known
 func (m *Manager) HasTokenLimit() bool {
-	return m.TokenLimit > 0
+	return m.tokenLimit > 0
+}
+
+// GetTokenLimit returns the token limit for the current session
+func (m *Manager) GetTokenLimit() int64 {
+	return m.tokenLimit
 }
 
 // Close stops the client and cleans up resources

@@ -295,20 +295,36 @@ This occurs when the Copilot Agent doesn't match the SDK's expected protocol ver
 
 ### Building Binaries for Distribution
 
-Use the included build script to create cross-platform binaries for all platforms:
+**Recommended:** Use the release script for a complete build and validation process:
+
+```bash
+# Auto-generates version from current date
+./scripts/release.sh
+
+# With custom version
+./scripts/release.sh "1.2.3"
+```
+
+This will automatically:
+
+- Run all tests
+- Build cross-platform binaries for all platforms
+- Update the `releases/` directory
+- Validate binary architectures
+- Provide git commands for release completion
+
+**Alternative:** Use the build script directly (creates binaries in `dist/` directory):
 
 ```bash
 ./scripts/build.sh
 ```
 
-This will automatically build binaries for:
+This will build binaries for:
 
 - macOS (Apple Silicon) - `cocli-darwin-arm64`
 - macOS (Intel) - `cocli-darwin-amd64`
 - Linux (x86_64) - `cocli-linux-amd64`
 - Linux (ARM64) - `cocli-linux-arm64`
-
-The binaries will be created in the `dist/` directory.
 
 If you prefer to build manually or for a specific platform:
 
@@ -337,12 +353,31 @@ To modify the tool:
 
 ### Release Process
 
-1. Make your changes and test locally with `go run main.go`
-2. Commit your changes and create a git tag
-3. Run `./scripts/build.sh` to build binaries for all platforms
-4. Copy binaries from `dist/` to `releases/`
-5. Create a GitHub release with the binaries attached
-6. Update the download URLs in the README with the new release version
+#### Automated Release (Recommended)
+
+Use the automated release script for binary building and validation:
+
+```bash
+# Basic usage - auto-generates version from current date
+./scripts/release.sh
+
+# With custom version
+./scripts/release.sh "1.2.3"
+```
+
+**What the script does automatically:**
+
+1. Runs all tests to ensure code quality
+2. Verifies the application builds locally
+3. Creates cross-platform binaries for all supported platforms
+4. Updates the `releases/` directory with new binaries
+5. Validates binary architectures and permissions
+6. Cleans up temporary build files
+7. Provides step-by-step git commands for manual execution
+
+**After running the script, complete the release manually:**
+
+The script will output git commands to run. Follow the "Manual steps remaining" from the script output.
 
 ## License
 

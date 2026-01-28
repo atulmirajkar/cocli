@@ -10,8 +10,6 @@ import (
 	"syscall"
 
 	"atulm/cocli/session"
-
-	copilot "github.com/github/copilot-sdk/go"
 )
 
 func main() {
@@ -31,16 +29,6 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// Use default model
-	defaultModel := "gpt-4.1"
-	selectedModel := defaultModel
-	var models []copilot.ModelInfo
-
-	// Create initial session
-	if err := sessionMgr.Create(selectedModel); err != nil {
-		log.Fatal(err)
-	}
-
 	reader := bufio.NewReader(os.Stdin)
 
 	// Check if a prompt was provided as a command-line argument
@@ -59,11 +47,11 @@ func main() {
 			prompt = initialPrompt
 			initialPrompt = "" // Clear it so we only use it once
 		} else {
-			// Display prompt with tokens if available
+			// Display prompt with tokens and multiplier if available
 			if sessionMgr.HasTokenLimit() {
-				fmt.Printf("[%s | %d/%d tokens] > ", selectedModel, sessionMgr.GetTokensLeft(), sessionMgr.TokenLimit)
+				fmt.Printf("[%s | %.2fx | %d/%d tokens] > ", sessionMgr.GetCurrentModel(), sessionMgr.GetCurrentMultiplier(), sessionMgr.GetTokensLeft(), sessionMgr.GetTokenLimit())
 			} else {
-				fmt.Printf("[%s] > ", selectedModel)
+				fmt.Printf("[%s | %.2fx] > ", sessionMgr.GetCurrentModel(), sessionMgr.GetCurrentMultiplier())
 			}
 			prompt, err = reader.ReadString('\n')
 			if err != nil {
@@ -75,44 +63,8 @@ func main() {
 		// Handle slash commands
 		if strings.HasPrefix(prompt, "/") {
 			if prompt == "/models" || prompt == "/list" {
-				// Fetch models from server only when requested
-				if len(models) == 0 {
-					fmt.Println("Fetching available models from server...")
-					var err error
-					models, err = sessionMgr.ListModels()
-					if err != nil {
-						fmt.Printf("Failed to list models: %v\n", err)
-						continue
-					}
-					if len(models) == 0 {
-						fmt.Println("No models available from server")
-						continue
-					}
-				}
-
-				fmt.Println("\nAvailable models:")
-				for i, model := range models {
-					prefix := "  "
-					if model.ID == selectedModel {
-						prefix = "* "
-					}
-					fmt.Printf("%s%d. %s (ID: %s)\n", prefix, i+1, model.Name, model.ID)
-				}
-				fmt.Printf("Enter model number (current: %s, press Enter to skip): ", selectedModel)
-				modelInput, _ := reader.ReadString('\n')
-				modelInput = strings.TrimSpace(modelInput)
-
-				if modelInput != "" {
-					var modelIdx int
-					_, err := fmt.Sscanf(modelInput, "%d", &modelIdx)
-					if err == nil && modelIdx > 0 && modelIdx <= len(models) {
-						selectedModel = models[modelIdx-1].ID
-						fmt.Printf("Switched to: %s\n\n", selectedModel)
-						// Recreate session with new model
-						if err := sessionMgr.Create(selectedModel); err != nil {
-							log.Fatal(err)
-						}
-					}
+				if err := promptForModelSelection(sessionMgr, reader); err != nil {
+					fmt.Printf("Error: %v\n", err)
 				}
 			} else {
 				fmt.Println("Unknown command. Use /models or /list to see available models.")
@@ -127,4 +79,45 @@ func main() {
 			}
 		}
 	}
+}
+
+func promptForModelSelection(sessionMgr *session.Manager, reader *bufio.Reader) error {
+	models, err := sessionMgr.GetModels()
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+	if len(models) == 0 {
+		return fmt.Errorf("no models available from server")
+	}
+
+	if err := sessionMgr.DisplayModels(); err != nil {
+		return fmt.Errorf("failed to display models: %w", err)
+	}
+
+	fmt.Printf("Enter model number (current: %s, press Enter to skip): ", sessionMgr.GetCurrentModel())
+	modelInput, _ := reader.ReadString('\n')
+	modelInput = strings.TrimSpace(modelInput)
+
+	if modelInput == "" {
+		return nil
+	}
+
+	var modelIdx int
+	_, err = fmt.Sscanf(modelInput, "%d", &modelIdx)
+	if err != nil || modelIdx <= 0 || modelIdx > len(models) {
+		return fmt.Errorf("invalid model selection")
+	}
+
+	model := models[modelIdx-1]
+	multiplier := 0.0
+	if model.Billing != nil {
+		multiplier = model.Billing.Multiplier
+	}
+
+	if err := sessionMgr.SetModel(model.ID, multiplier); err != nil {
+		return fmt.Errorf("failed to switch model: %w", err)
+	}
+
+	fmt.Printf("Switched to: %s (%.2fx)\n\n", model.ID, multiplier)
+	return nil
 }
