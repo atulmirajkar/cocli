@@ -4,34 +4,15 @@ import (
 	"fmt"
 	"time"
 
+	"atulm/cocli/client"
+
 	copilot "github.com/github/copilot-sdk/go"
 )
-
-// ClientInterface defines the interface for copilot client operations
-type ClientInterface interface {
-	CreateSession(*copilot.SessionConfig) (SessionInterface, error)
-	ListModels() ([]copilot.ModelInfo, error)
-	Start() error
-	Stop() []error
-}
 
 // SessionInterface defines the interface for session operations
 type SessionInterface interface {
 	On(copilot.SessionEventHandler) func()
 	SendAndWait(copilot.MessageOptions, time.Duration) (*copilot.SessionEvent, error)
-}
-
-// copilotClient wraps the actual copilot.Client to implement ClientInterface
-type copilotClient struct {
-	*copilot.Client
-}
-
-func (r *copilotClient) CreateSession(config *copilot.SessionConfig) (SessionInterface, error) {
-	session, err := r.Client.CreateSession(config)
-	if err != nil {
-		return nil, err
-	}
-	return &copilotSession{session}, nil
 }
 
 // copilotSession wraps the actual copilot.Session to implement SessionInterface
@@ -41,34 +22,45 @@ type copilotSession struct {
 
 // Manager handles session creation and lifecycle
 type Manager struct {
-	client            ClientInterface
+	client            *client.Client
 	session           SessionInterface
 	currentTokens     int64
 	tokenLimit        int64
 	currentModel      string
 	currentMultiplier float64
-	models            []copilot.ModelInfo
 	renderer          *StreamingMarkdownRenderer
 }
 
-// NewManager creates a new session manager and initializes the client with default model
-func NewManager() (*Manager, error) {
-	client := copilot.NewClient(nil)
-	if err := client.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start client: %w", err)
-	}
-
+// NewManager creates a new session manager with the given client.
+// It creates an initial session with the default model.
+func NewManager(cli *client.Client) (*Manager, error) {
 	renderer, err := NewStreamingMarkdownRenderer()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create markdown renderer: %w", err)
 	}
 
+	defaultModel := "Claude Sonnet 4.5"
+
 	mgr := &Manager{
-		client:            &copilotClient{client},
-		currentModel:      "Claude Sonnet 4.5",
+		client:            cli,
+		currentModel:      defaultModel,
 		currentMultiplier: 0,
-		models:            []copilot.ModelInfo{},
 		renderer:          renderer,
+	}
+
+	// Try to fetch billing multiplier for default model
+	models, err := cli.GetModels()
+	if err == nil {
+		for _, model := range models {
+			if model.Name == defaultModel {
+				if model.Billing != nil {
+					mgr.currentMultiplier = model.Billing.Multiplier
+				}
+				// Use the actual model ID for session creation
+				mgr.currentModel = model.ID
+				break
+			}
+		}
 	}
 
 	// Create initial session with default model
@@ -79,14 +71,13 @@ func NewManager() (*Manager, error) {
 	return mgr, nil
 }
 
-// NewManagerWithClient creates a manager with a custom client (for testing)
-func NewManagerWithClient(client ClientInterface) *Manager {
+// NewManagerForTesting creates a manager for testing with a custom client
+func NewManagerForTesting(cli *client.Client) *Manager {
 	return &Manager{
-		client:            client,
+		client:            cli,
 		currentModel:      "Claude Sonnet 4.5",
 		currentMultiplier: 0,
-		models:            []copilot.ModelInfo{},
-		renderer:          nil, // Will be set up when Create() is called or can be set explicitly
+		renderer:          nil,
 	}
 }
 
@@ -95,12 +86,17 @@ func (m *Manager) SetRenderer(r *StreamingMarkdownRenderer) {
 	m.renderer = r
 }
 
+// IsUsingDaemon returns true if the client is connected to a daemon
+func (m *Manager) IsUsingDaemon() bool {
+	return m.client.IsUsingDaemon()
+}
+
 // Create creates a new session with the given model and sets up event handlers.
 // The session is configured with a system message that instructs the model to
 // always format responses using markdown, ensuring consistent, high-quality output
 // that works well with the streaming markdown renderer.
 func (m *Manager) Create(model string) error {
-	session, err := m.client.CreateSession(&copilot.SessionConfig{
+	sess, err := m.client.CreateSession(&copilot.SessionConfig{
 		Model:     model,
 		Streaming: true,
 		SystemMessage: &copilot.SystemMessageConfig{
@@ -112,12 +108,17 @@ func (m *Manager) Create(model string) error {
 		return fmt.Errorf("failed to create session: %w", err)
 	}
 
-	m.session = session
+	// Wrap session if not nil (nil in tests with mock client)
+	if sess != nil {
+		m.session = &copilotSession{sess}
+	}
 	m.currentTokens = 0
 	m.tokenLimit = 0
 
-	// Set up event listeners
-	m.setupEventHandlers()
+	// Set up event listeners only if session exists
+	if m.session != nil {
+		m.setupEventHandlers()
+	}
 
 	return nil
 }
@@ -167,27 +168,23 @@ func (m *Manager) Send(prompt string) error {
 	return nil
 }
 
-// GetModels returns cached models, fetching from server if needed
+// GetModels returns cached models from the client
 func (m *Manager) GetModels() ([]copilot.ModelInfo, error) {
-	if len(m.models) == 0 {
-		fmt.Println("Fetching available models from server...")
-		var err error
-		m.models, err = m.client.ListModels()
-		if err != nil {
-			return nil, err
-		}
-	}
-	return m.models, nil
+	return m.client.GetModels()
 }
 
 // DisplayModels prints the list of available models with billing info
 func (m *Manager) DisplayModels() error {
-	if len(m.models) == 0 {
+	models, err := m.client.GetModels()
+	if err != nil {
+		return err
+	}
+	if len(models) == 0 {
 		return fmt.Errorf("no models available")
 	}
 
 	fmt.Println("\nAvailable models:")
-	for i, model := range m.models {
+	for i, model := range models {
 		prefix := "  "
 		if model.ID == m.currentModel {
 			prefix = "* "
@@ -241,7 +238,8 @@ func (m *Manager) GetTokenLimit() int64 {
 	return m.tokenLimit
 }
 
-// Close stops the client and cleans up resources
+// Close is a no-op for session manager - client lifecycle is managed separately
 func (m *Manager) Close() []error {
-	return m.client.Stop()
+	// Client lifecycle is managed by the caller
+	return nil
 }

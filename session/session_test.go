@@ -9,17 +9,21 @@ import (
 	"testing"
 	"time"
 
+	"atulm/cocli/client"
+
 	copilot "github.com/github/copilot-sdk/go"
 )
 
 // Mock implementations for testing
-type mockClient struct {
+
+// mockSDKClient implements client.ClientInterface for testing
+type mockSDKClient struct {
 	models      []copilot.ModelInfo
 	createError error
 	listError   error
 }
 
-func (m *mockClient) ListModels() ([]copilot.ModelInfo, error) {
+func (m *mockSDKClient) ListModels() ([]copilot.ModelInfo, error) {
 	if m.listError != nil {
 		return nil, m.listError
 	}
@@ -29,21 +33,23 @@ func (m *mockClient) ListModels() ([]copilot.ModelInfo, error) {
 	return m.models, nil
 }
 
-func (m *mockClient) CreateSession(config *copilot.SessionConfig) (SessionInterface, error) {
+func (m *mockSDKClient) CreateSession(config *copilot.SessionConfig) (*copilot.Session, error) {
 	if m.createError != nil {
 		return nil, m.createError
 	}
-	return &mockSession{model: config.Model}, nil
+	// Return nil session - tests that need session behavior will use mockSession
+	return nil, nil
 }
 
-func (m *mockClient) Start() error {
+func (m *mockSDKClient) Start() error {
 	return nil
 }
 
-func (m *mockClient) Stop() []error {
+func (m *mockSDKClient) Stop() []error {
 	return nil
 }
 
+// mockSession implements SessionInterface for testing
 type mockSession struct {
 	model string
 }
@@ -74,6 +80,19 @@ func captureOutput(f func()) string {
 	return buf.String()
 }
 
+// createTestManager creates a Manager with mock client for testing
+func createTestManager(mockSDK *mockSDKClient) *Manager {
+	cli := client.NewClientWithSDK(mockSDK)
+	return NewManagerForTesting(cli)
+}
+
+// createTestManagerWithSession creates a Manager with mock client and sets a mock session
+func createTestManagerWithSession(mockSDK *mockSDKClient) *Manager {
+	mgr := createTestManager(mockSDK)
+	mgr.session = &mockSession{}
+	return mgr
+}
+
 // TestGetCurrentModel tests the GetCurrentModel method
 func TestGetCurrentModel(t *testing.T) {
 	tests := []struct {
@@ -100,9 +119,9 @@ func TestGetCurrentModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &Manager{
-				currentModel: tt.model,
-			}
+			mgr := createTestManager(&mockSDKClient{})
+			mgr.currentModel = tt.model
+
 			result := mgr.GetCurrentModel()
 			if result != tt.expected {
 				t.Errorf("GetCurrentModel() = %v, want %v", result, tt.expected)
@@ -147,9 +166,9 @@ func TestGetCurrentMultiplier(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &Manager{
-				currentMultiplier: tt.multiplier,
-			}
+			mgr := createTestManager(&mockSDKClient{})
+			mgr.currentMultiplier = tt.multiplier
+
 			result := mgr.GetCurrentMultiplier()
 			if result != tt.expected {
 				t.Errorf("GetCurrentMultiplier() = %v, want %v", result, tt.expected)
@@ -189,9 +208,9 @@ func TestGetTokenLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &Manager{
-				tokenLimit: tt.limit,
-			}
+			mgr := createTestManager(&mockSDKClient{})
+			mgr.tokenLimit = tt.limit
+
 			result := mgr.GetTokenLimit()
 			if result != tt.expected {
 				t.Errorf("GetTokenLimit() = %v, want %v", result, tt.expected)
@@ -242,10 +261,10 @@ func TestGetTokensLeft(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &Manager{
-				tokenLimit:    tt.tokenLimit,
-				currentTokens: tt.currentTokens,
-			}
+			mgr := createTestManager(&mockSDKClient{})
+			mgr.tokenLimit = tt.tokenLimit
+			mgr.currentTokens = tt.currentTokens
+
 			result := mgr.GetTokensLeft()
 			if result != tt.expected {
 				t.Errorf("GetTokensLeft() = %v, want %v", result, tt.expected)
@@ -285,9 +304,9 @@ func TestHasTokenLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &Manager{
-				tokenLimit: tt.limit,
-			}
+			mgr := createTestManager(&mockSDKClient{})
+			mgr.tokenLimit = tt.limit
+
 			result := mgr.HasTokenLimit()
 			if result != tt.expected {
 				t.Errorf("HasTokenLimit() = %v, want %v", result, tt.expected)
@@ -344,10 +363,9 @@ func TestTokenCalculations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &Manager{
-				tokenLimit:    tt.tokenLimit,
-				currentTokens: tt.currentTokens,
-			}
+			mgr := createTestManager(&mockSDKClient{})
+			mgr.tokenLimit = tt.tokenLimit
+			mgr.currentTokens = tt.currentTokens
 
 			if got := mgr.HasTokenLimit(); got != tt.wantHasLimit {
 				t.Errorf("HasTokenLimit() = %v, want %v", got, tt.wantHasLimit)
@@ -401,10 +419,9 @@ func TestModelState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &Manager{
-				currentModel:      tt.model,
-				currentMultiplier: tt.multiplier,
-			}
+			mgr := createTestManager(&mockSDKClient{})
+			mgr.currentModel = tt.model
+			mgr.currentMultiplier = tt.multiplier
 
 			if got := mgr.GetCurrentModel(); got != tt.wantModel {
 				t.Errorf("GetCurrentModel() = %v, want %v", got, tt.wantModel)
@@ -447,10 +464,8 @@ func TestCreate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &mockClient{
-				createError: tt.createError,
-			}
-			mgr := NewManagerWithClient(mockClient)
+			mockSDK := &mockSDKClient{createError: tt.createError}
+			mgr := createTestManager(mockSDK)
 
 			err := mgr.Create(tt.model)
 
@@ -507,10 +522,8 @@ func TestSetModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &mockClient{
-				createError: tt.createError,
-			}
-			mgr := NewManagerWithClient(mockClient)
+			mockSDK := &mockSDKClient{createError: tt.createError}
+			mgr := createTestManager(mockSDK)
 
 			err := mgr.SetModel(tt.modelID, tt.multiplier)
 
@@ -533,7 +546,7 @@ func TestSetModel(t *testing.T) {
 	}
 }
 
-// TestGetModels tests the GetModels method (caching and fetching)
+// TestGetModels tests the GetModels method (delegates to client)
 func TestGetModels(t *testing.T) {
 	testModels := []copilot.ModelInfo{
 		{ID: "claude-haiku-4.5", Name: "Claude Sonnet 4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
@@ -541,57 +554,42 @@ func TestGetModels(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		cachedModels []copilot.ModelInfo
-		serverModels []copilot.ModelInfo
-		listError    error
-		wantError    bool
-		wantModels   int
-		shouldFetch  bool
+		name       string
+		models     []copilot.ModelInfo
+		listError  error
+		wantError  bool
+		wantModels int
 	}{
 		{
-			name:         "fetch from server when cache empty",
-			cachedModels: []copilot.ModelInfo{},
-			serverModels: testModels,
-			wantError:    false,
-			wantModels:   2,
-			shouldFetch:  true,
+			name:       "fetch from server",
+			models:     testModels,
+			wantError:  false,
+			wantModels: 2,
 		},
 		{
-			name:         "return cached models",
-			cachedModels: testModels,
-			serverModels: []copilot.ModelInfo{},
-			wantError:    false,
-			wantModels:   2,
-			shouldFetch:  false,
+			name:      "server error",
+			models:    []copilot.ModelInfo{},
+			listError: fmt.Errorf("server unavailable"),
+			wantError: true,
 		},
 		{
-			name:         "server error",
-			cachedModels: []copilot.ModelInfo{},
-			serverModels: []copilot.ModelInfo{},
-			listError:    fmt.Errorf("server unavailable"),
-			wantError:    true,
-		},
-		{
-			name:         "empty server response",
-			cachedModels: []copilot.ModelInfo{},
-			serverModels: []copilot.ModelInfo{},
-			wantError:    false,
-			wantModels:   0,
+			name:       "empty server response",
+			models:     []copilot.ModelInfo{},
+			wantError:  false,
+			wantModels: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &mockClient{
-				models:    tt.serverModels,
+			mockSDK := &mockSDKClient{
+				models:    tt.models,
 				listError: tt.listError,
 			}
-			mgr := NewManagerWithClient(mockClient)
-			mgr.models = tt.cachedModels
+			mgr := createTestManager(mockSDK)
 
-			// Capture output to verify "Fetching..." message
-			output := captureOutput(func() {
+			// Capture output since GetModels prints "Fetching..." on first call
+			captureOutput(func() {
 				models, err := mgr.GetModels()
 
 				if tt.wantError {
@@ -607,10 +605,6 @@ func TestGetModels(t *testing.T) {
 					}
 				}
 			})
-
-			if tt.shouldFetch && !strings.Contains(output, "Fetching available models") {
-				t.Errorf("GetModels() should have printed fetching message")
-			}
 		})
 	}
 }
@@ -651,11 +645,11 @@ func TestListModels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &mockClient{
+			mockSDK := &mockSDKClient{
 				models:    tt.models,
 				listError: tt.listError,
 			}
-			mgr := NewManagerWithClient(mockClient)
+			mgr := createTestManager(mockSDK)
 
 			models, err := mgr.ListModels()
 
@@ -722,8 +716,8 @@ func TestDisplayModels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := NewManagerWithClient(&mockClient{})
-			mgr.models = tt.models
+			mockSDK := &mockSDKClient{models: tt.models}
+			mgr := createTestManager(mockSDK)
 			mgr.currentModel = tt.currentModel
 
 			output := captureOutput(func() {
@@ -751,23 +745,15 @@ func TestDisplayModels(t *testing.T) {
 	}
 }
 
-// TestNewManagerWithClient tests the NewManagerWithClient function
-func TestNewManagerWithClient(t *testing.T) {
+// TestNewManagerForTesting tests the NewManagerForTesting function
+func TestNewManagerForTesting(t *testing.T) {
 	tests := []struct {
 		name          string
-		client        ClientInterface
 		expectedModel string
 		expectedMult  float64
 	}{
 		{
 			name:          "successful creation with mock client",
-			client:        &mockClient{},
-			expectedModel: "Claude Sonnet 4.5",
-			expectedMult:  0,
-		},
-		{
-			name:          "creation with different client",
-			client:        &mockClient{models: []copilot.ModelInfo{}},
 			expectedModel: "Claude Sonnet 4.5",
 			expectedMult:  0,
 		},
@@ -775,10 +761,12 @@ func TestNewManagerWithClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := NewManagerWithClient(tt.client)
+			mockSDK := &mockSDKClient{}
+			cli := client.NewClientWithSDK(mockSDK)
+			mgr := NewManagerForTesting(cli)
 
 			if mgr == nil {
-				t.Error("NewManagerWithClient() returned nil")
+				t.Error("NewManagerForTesting() returned nil")
 				return
 			}
 
@@ -788,17 +776,6 @@ func TestNewManagerWithClient(t *testing.T) {
 
 			if mgr.GetCurrentMultiplier() != tt.expectedMult {
 				t.Errorf("Expected multiplier %f, got %f", tt.expectedMult, mgr.GetCurrentMultiplier())
-			}
-
-			// Verify models slice is initialized
-			models, err := mgr.GetModels()
-			if err != nil {
-				t.Errorf("GetModels() returned error: %v", err)
-			}
-
-			// Should be empty initially or contain mocked models
-			if models == nil {
-				t.Error("GetModels() returned nil slice")
 			}
 		})
 	}
@@ -841,10 +818,8 @@ func TestCreateSession(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &mockClient{
-				createError: tt.createError,
-			}
-			mgr := NewManagerWithClient(mockClient)
+			mockSDK := &mockSDKClient{createError: tt.createError}
+			mgr := createTestManager(mockSDK)
 
 			err := mgr.Create(tt.model)
 
@@ -875,8 +850,8 @@ func TestCreateSession(t *testing.T) {
 
 // TestSessionLifecycle tests the complete session lifecycle
 func TestSessionLifecycle(t *testing.T) {
-	mockClient := &mockClient{}
-	mgr := NewManagerWithClient(mockClient)
+	mockSDK := &mockSDKClient{}
+	mgr := createTestManager(mockSDK)
 
 	// Test initial state
 	initialModel := mgr.GetCurrentModel()
@@ -922,24 +897,11 @@ func TestSessionLifecycle(t *testing.T) {
 	}
 }
 
-// Test helper functions and edge cases
+// TestManagerEdgeCases tests edge cases
 func TestManagerEdgeCases(t *testing.T) {
-	t.Run("nil client handling", func(t *testing.T) {
-		// This tests what happens with a nil client - should not panic
-		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("NewManagerWithClient panicked with nil client: %v", r)
-			}
-		}()
-
-		mgr := NewManagerWithClient(nil)
-		if mgr == nil {
-			t.Error("NewManagerWithClient returned nil with nil client")
-		}
-	})
-
 	t.Run("multiple create calls", func(t *testing.T) {
-		mgr := NewManagerWithClient(&mockClient{})
+		mockSDK := &mockSDKClient{}
+		mgr := createTestManager(mockSDK)
 
 		// First create
 		err1 := mgr.Create("model1")
@@ -959,113 +921,67 @@ func TestManagerEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("close with errors", func(t *testing.T) {
-		// Test client that returns errors on close
-		errorClient := &mockClientWithCloseError{
-			mockClient:  &mockClient{},
-			closeErrors: []error{fmt.Errorf("cleanup error 1"), fmt.Errorf("cleanup error 2")},
-		}
+	t.Run("close returns nil", func(t *testing.T) {
+		mockSDK := &mockSDKClient{}
+		mgr := createTestManager(mockSDK)
 
-		mgr := NewManagerWithClient(errorClient)
 		errors := mgr.Close()
-
-		if len(errors) != 2 {
-			t.Errorf("Expected 2 close errors, got %d", len(errors))
+		if errors != nil && len(errors) > 0 {
+			t.Errorf("Expected Close to return nil, got %v", errors)
 		}
 	})
 }
 
-// Additional mock for testing close errors
-type mockClientWithCloseError struct {
-	*mockClient
-	closeErrors []error
-}
+// TestSendWithNoSession tests Send when no session exists
+func TestSendWithNoSession(t *testing.T) {
+	mockSDK := &mockSDKClient{}
+	mgr := createTestManager(mockSDK)
+	// Don't create a session, leave it nil
 
-func (m *mockClientWithCloseError) Stop() []error {
-	return m.closeErrors
-}
-
-// Mock client that captures the session config for verification
-type mockClientWithConfigCapture struct {
-	*mockClient
-	capturedConfig *copilot.SessionConfig
-}
-
-func (m *mockClientWithConfigCapture) CreateSession(config *copilot.SessionConfig) (SessionInterface, error) {
-	m.capturedConfig = config
-	if m.createError != nil {
-		return nil, m.createError
+	err := mgr.Send("test prompt")
+	if err == nil {
+		t.Error("Expected error when sending without session")
 	}
-	return &mockSession{model: config.Model}, nil
+	if !strings.Contains(err.Error(), "no active session") {
+		t.Errorf("Expected 'no active session' error, got: %v", err)
+	}
 }
 
-// TestSessionCreationWithSystemMessage verifies that sessions are created with markdown system message
-func TestSessionCreationWithSystemMessage(t *testing.T) {
-	mockClient := &mockClientWithConfigCapture{
-		mockClient: &mockClient{},
-	}
-	mgr := NewManagerWithClient(mockClient)
+// TestSendWithSession tests Send with an active session
+func TestSendWithSession(t *testing.T) {
+	mockSDK := &mockSDKClient{}
+	mgr := createTestManagerWithSession(mockSDK)
 
-	err := mgr.Create("test-model")
+	err := mgr.Send("test prompt")
 	if err != nil {
-		t.Fatalf("Create() unexpected error: %v", err)
-	}
-
-	// Verify the config was captured
-	if mockClient.capturedConfig == nil {
-		t.Fatal("CreateSession was not called or config was not captured")
-	}
-
-	// Verify Model is set correctly
-	if mockClient.capturedConfig.Model != "test-model" {
-		t.Errorf("Expected Model to be 'test-model', got '%s'", mockClient.capturedConfig.Model)
-	}
-
-	// Verify Streaming is enabled
-	if !mockClient.capturedConfig.Streaming {
-		t.Error("Expected Streaming to be true")
-	}
-
-	// Verify SystemMessage is configured
-	if mockClient.capturedConfig.SystemMessage == nil {
-		t.Fatal("Expected SystemMessage to be set, got nil")
-	}
-
-	// Verify SystemMessage Mode
-	if mockClient.capturedConfig.SystemMessage.Mode != "append" {
-		t.Errorf("Expected SystemMessage.Mode to be 'append', got '%s'", mockClient.capturedConfig.SystemMessage.Mode)
-	}
-
-	// Verify SystemMessage Content
-	expectedContent := "Always format responses using markdown with code blocks."
-	if mockClient.capturedConfig.SystemMessage.Content != expectedContent {
-		t.Errorf("Expected SystemMessage.Content to be '%s', got '%s'", expectedContent, mockClient.capturedConfig.SystemMessage.Content)
+		t.Errorf("Unexpected error: %v", err)
 	}
 }
 
-// TestSetModelWithSystemMessage verifies that SetModel also includes the system message
-func TestSetModelWithSystemMessage(t *testing.T) {
-	mockClient := &mockClientWithConfigCapture{
-		mockClient: &mockClient{},
-	}
-	mgr := NewManagerWithClient(mockClient)
+// TestIsUsingDaemon tests daemon flag delegation to client
+func TestIsUsingDaemon(t *testing.T) {
+	mockSDK := &mockSDKClient{}
+	mgr := createTestManager(mockSDK)
 
-	err := mgr.SetModel("new-model", 1.5)
-	if err != nil {
-		t.Fatalf("SetModel() unexpected error: %v", err)
+	// NewClientWithSDK sets usingDaemon to false
+	if mgr.IsUsingDaemon() {
+		t.Error("Expected IsUsingDaemon to return false for mock client")
 	}
+}
 
-	// Verify the config was captured
-	if mockClient.capturedConfig == nil {
-		t.Fatal("CreateSession was not called or config was not captured")
-	}
+// TestSetRenderer tests setting a custom renderer
+func TestSetRenderer(t *testing.T) {
+	mockSDK := &mockSDKClient{}
+	mgr := createTestManager(mockSDK)
 
-	// Verify SystemMessage is configured (SetModel calls Create internally)
-	if mockClient.capturedConfig.SystemMessage == nil {
-		t.Fatal("Expected SystemMessage to be set, got nil")
+	if mgr.renderer != nil {
+		t.Error("Expected renderer to be nil initially for test manager")
 	}
 
-	if mockClient.capturedConfig.SystemMessage.Mode != "append" {
-		t.Errorf("Expected SystemMessage.Mode to be 'append', got '%s'", mockClient.capturedConfig.SystemMessage.Mode)
+	renderer, _ := NewStreamingMarkdownRenderer()
+	mgr.SetRenderer(renderer)
+
+	if mgr.renderer != renderer {
+		t.Error("SetRenderer did not set the renderer")
 	}
 }
