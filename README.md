@@ -5,6 +5,7 @@ An interactive Go CLI tool for quick question answer mode in the cli. This is bu
 ## Features
 
 - **Interactive CLI** - Chat with AI models in real-time
+- **Markdown Rendering** - Beautiful syntax-highlighted output with dark theme
 - **Dynamic Model Selection** - List and switch between available models on the fly
 - **Token Tracking** - Monitor token usage during conversations
 - **Model Persistence** - Maintains the current model throughout the session
@@ -153,7 +154,7 @@ cocli Check if x > 5 && y < 10
 The tool will start and display a prompt with the current model and token information:
 
 ```
-[gpt-4.1 | 4000/4000 tokens] >
+[Claude Sonnet 4.5 | 1.00x | 4000/4000 tokens] >
 ```
 
 ### Available Commands
@@ -163,24 +164,23 @@ The tool will start and display a prompt with the current model and token inform
 Simply type your prompt and press Enter (or pass it as arguments):
 
 ```
-[gpt-4.1 | 4000/4000 tokens] > What is the capital of France?
+[Claude Sonnet 4.5 | 1.00x | 3500/4000 tokens] > What is the capital of France?
 ```
 
-The response will be streamed in real-time to your terminal.
+The response will be streamed in real-time to your terminal with markdown formatting and syntax highlighting.
 
 #### List Available Models
 
 Type `/models` or `/list` to see all available models:
 
 ```
-[gpt-4.1 | 3500/4000 tokens] > /models
+[Claude Sonnet 4.5 | 1.00x | 3500/4000 tokens] > /models
 
 Fetching available models from server...
 Available models:
-* 1. GPT-4.1 (ID: gpt-4.1)
-  2. GPT-5 (ID: gpt-5)
-  3. Claude Haiku (ID: claude-haiku-4.5)
-  4. Claude Sonnet (ID: claude-sonnet-4.5)
+  1. Claude Haiku 4.5 (ID: claude-haiku-4.5) (0.33x)
+* 2. Claude Sonnet 4.5 (ID: claude-sonnet-4.5) (1.00x)
+  3. GPT-4.1 (ID: gpt-4.1) (2.00x)
   ...
 ```
 
@@ -189,8 +189,8 @@ Available models:
 When viewing the model list, enter the number corresponding to the model you want to use:
 
 ```
-Enter model number (current: gpt-4.1, press Enter to skip): 2
-Switched to: gpt-5
+Enter model number (current: Claude Sonnet 4.5, press Enter to skip): 1
+Switched to: Claude Haiku 4.5 (0.33x)
 ```
 
 A new session will be created with the selected model, and token counters will reset.
@@ -200,7 +200,7 @@ A new session will be created with the selected model, and token counters will r
 Press `Ctrl+C` to exit gracefully:
 
 ```
-[gpt-4.1 | 2500/4000 tokens] > ^C
+[Claude Sonnet 4.5 | 1.00x | 2500/4000 tokens] > ^C
 Bye
 ```
 
@@ -214,8 +214,11 @@ cocli/
 ├── .gitignore                   # Git ignore rules for Go projects
 │
 ├── session/
-│   └── session.go               # Session manager - encapsulates SDK client,
-│                                # session creation, and event handling
+│   ├── session.go               # Session manager - encapsulates SDK client,
+│   │                            # session creation, and event handling
+│   ├── session_test.go          # Unit tests for session manager
+│   ├── renderer.go              # Streaming markdown renderer with syntax highlighting
+│   └── renderer_test.go         # Unit tests for markdown renderer
 │
 ├── scripts/
 │   └── build.sh                 # Cross-platform build script for all platforms
@@ -227,6 +230,7 @@ cocli/
 │   ├── cocli-linux-amd64        # Linux x86_64 binary
 │   └── cocli-linux-arm64        # Linux ARM64 binary
 │
+├── TESTING.md                   # Manual testing checklist for markdown rendering
 └── README.md                    # This file
 ```
 
@@ -263,12 +267,23 @@ The main program:
 Token usage is displayed in the prompt format:
 
 ```
-[model | tokens_remaining/token_limit] >
+[model | multiplier | tokens_remaining/token_limit] >
 ```
 
 - **tokens_remaining** = token_limit - current_tokens_used
 - **token_limit** = Maximum tokens available for the session
 - Resets to 0/0 when switching models (each model has its own limit)
+
+## Markdown Rendering
+
+The CLI automatically renders markdown responses with beautiful formatting:
+
+- **Dark Theme** - Optimized for terminal readability
+- **Syntax Highlighting** - Code blocks with language-specific coloring (Go, Python, JavaScript, etc.)
+- **Real-time Streaming** - Markdown is rendered incrementally as responses arrive
+- **Formatted Elements** - Headers, lists, bold, italic, inline code, and links are properly styled
+
+The renderer buffers content intelligently to maintain the streaming feel while ensuring proper markdown formatting. No configuration needed—it works automatically!
 
 ## Troubleshooting
 

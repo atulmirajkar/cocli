@@ -83,8 +83,8 @@ func TestGetCurrentModel(t *testing.T) {
 	}{
 		{
 			name:     "default model",
-			model:    "Claude Haiku 4.5",
-			expected: "Claude Haiku 4.5",
+			model:    "Claude Sonnet 4.5",
+			expected: "Claude Sonnet 4.5",
 		},
 		{
 			name:     "gpt model",
@@ -536,7 +536,7 @@ func TestSetModel(t *testing.T) {
 // TestGetModels tests the GetModels method (caching and fetching)
 func TestGetModels(t *testing.T) {
 	testModels := []copilot.ModelInfo{
-		{ID: "claude-haiku-4.5", Name: "Claude Haiku 4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
+		{ID: "claude-haiku-4.5", Name: "Claude Sonnet 4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
 		{ID: "claude-sonnet-4.5", Name: "Claude Sonnet 4.5", Billing: &copilot.ModelBilling{Multiplier: 1.0}},
 	}
 
@@ -678,7 +678,7 @@ func TestListModels(t *testing.T) {
 // TestDisplayModels tests the DisplayModels method
 func TestDisplayModels(t *testing.T) {
 	testModels := []copilot.ModelInfo{
-		{ID: "claude-haiku-4.5", Name: "Claude Haiku 4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
+		{ID: "claude-haiku-4.5", Name: "Claude Sonnet 4.5", Billing: &copilot.ModelBilling{Multiplier: 0.33}},
 		{ID: "claude-sonnet-4.5", Name: "Claude Sonnet 4.5", Billing: &copilot.ModelBilling{Multiplier: 1.0}},
 		{ID: "claude-opus-4.5", Name: "Claude Opus 4.5", Billing: &copilot.ModelBilling{Multiplier: 3.0}},
 	}
@@ -697,7 +697,7 @@ func TestDisplayModels(t *testing.T) {
 			wantError:    false,
 			expectInOutput: []string{
 				"Available models:",
-				"1. Claude Haiku 4.5 (ID: claude-haiku-4.5) (0.33x)",
+				"1. Claude Sonnet 4.5 (ID: claude-haiku-4.5) (0.33x)",
 				"* 2. Claude Sonnet 4.5 (ID: claude-sonnet-4.5) (1.00x)",
 				"3. Claude Opus 4.5 (ID: claude-opus-4.5) (3.00x)",
 			},
@@ -762,13 +762,13 @@ func TestNewManagerWithClient(t *testing.T) {
 		{
 			name:          "successful creation with mock client",
 			client:        &mockClient{},
-			expectedModel: "Claude Haiku 4.5",
+			expectedModel: "Claude Sonnet 4.5",
 			expectedMult:  0,
 		},
 		{
 			name:          "creation with different client",
 			client:        &mockClient{models: []copilot.ModelInfo{}},
-			expectedModel: "Claude Haiku 4.5",
+			expectedModel: "Claude Sonnet 4.5",
 			expectedMult:  0,
 		},
 	}
@@ -880,8 +880,8 @@ func TestSessionLifecycle(t *testing.T) {
 
 	// Test initial state
 	initialModel := mgr.GetCurrentModel()
-	if initialModel != "Claude Haiku 4.5" {
-		t.Errorf("Expected initial model 'Claude Haiku 4.5', got %s", initialModel)
+	if initialModel != "Claude Sonnet 4.5" {
+		t.Errorf("Expected initial model 'Claude Sonnet 4.5', got %s", initialModel)
 	}
 
 	// Test creating a session

@@ -48,6 +48,7 @@ type Manager struct {
 	currentModel      string
 	currentMultiplier float64
 	models            []copilot.ModelInfo
+	renderer          *StreamingMarkdownRenderer
 }
 
 // NewManager creates a new session manager and initializes the client with default model
@@ -57,11 +58,17 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to start client: %w", err)
 	}
 
+	renderer, err := NewStreamingMarkdownRenderer()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create markdown renderer: %w", err)
+	}
+
 	mgr := &Manager{
 		client:            &copilotClient{client},
-		currentModel:      "Claude Haiku 4.5",
+		currentModel:      "Claude Sonnet 4.5",
 		currentMultiplier: 0,
 		models:            []copilot.ModelInfo{},
+		renderer:          renderer,
 	}
 
 	// Create initial session with default model
@@ -76,10 +83,16 @@ func NewManager() (*Manager, error) {
 func NewManagerWithClient(client ClientInterface) *Manager {
 	return &Manager{
 		client:            client,
-		currentModel:      "Claude Haiku 4.5",
+		currentModel:      "Claude Sonnet 4.5",
 		currentMultiplier: 0,
 		models:            []copilot.ModelInfo{},
+		renderer:          nil, // Will be set up when Create() is called or can be set explicitly
 	}
+}
+
+// SetRenderer sets a custom renderer (useful for testing)
+func (m *Manager) SetRenderer(r *StreamingMarkdownRenderer) {
+	m.renderer = r
 }
 
 // Create creates a new session with the given model and sets up event handlers
@@ -107,9 +120,17 @@ func (m *Manager) setupEventHandlers() {
 	m.session.On(func(event copilot.SessionEvent) {
 		if event.Type == "assistant.message_delta" {
 			if event.Data.DeltaContent != nil {
-				fmt.Print(*event.Data.DeltaContent)
+				if m.renderer != nil {
+					m.renderer.ProcessDelta(*event.Data.DeltaContent)
+				} else {
+					// Fallback to plain text if renderer not available
+					fmt.Print(*event.Data.DeltaContent)
+				}
 			}
 		} else if event.Type == "session.idle" {
+			if m.renderer != nil {
+				m.renderer.Flush()
+			}
 			fmt.Println()
 		}
 
