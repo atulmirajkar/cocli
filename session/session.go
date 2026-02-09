@@ -95,11 +95,18 @@ func (m *Manager) SetRenderer(r *StreamingMarkdownRenderer) {
 	m.renderer = r
 }
 
-// Create creates a new session with the given model and sets up event handlers
+// Create creates a new session with the given model and sets up event handlers.
+// The session is configured with a system message that instructs the model to
+// always format responses using markdown, ensuring consistent, high-quality output
+// that works well with the streaming markdown renderer.
 func (m *Manager) Create(model string) error {
 	session, err := m.client.CreateSession(&copilot.SessionConfig{
 		Model:     model,
 		Streaming: true,
+		SystemMessage: &copilot.SystemMessageConfig{
+			Mode:    "append",
+			Content: "Always format responses using markdown with code blocks.",
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)

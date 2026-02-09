@@ -984,3 +984,88 @@ type mockClientWithCloseError struct {
 func (m *mockClientWithCloseError) Stop() []error {
 	return m.closeErrors
 }
+
+// Mock client that captures the session config for verification
+type mockClientWithConfigCapture struct {
+	*mockClient
+	capturedConfig *copilot.SessionConfig
+}
+
+func (m *mockClientWithConfigCapture) CreateSession(config *copilot.SessionConfig) (SessionInterface, error) {
+	m.capturedConfig = config
+	if m.createError != nil {
+		return nil, m.createError
+	}
+	return &mockSession{model: config.Model}, nil
+}
+
+// TestSessionCreationWithSystemMessage verifies that sessions are created with markdown system message
+func TestSessionCreationWithSystemMessage(t *testing.T) {
+	mockClient := &mockClientWithConfigCapture{
+		mockClient: &mockClient{},
+	}
+	mgr := NewManagerWithClient(mockClient)
+
+	err := mgr.Create("test-model")
+	if err != nil {
+		t.Fatalf("Create() unexpected error: %v", err)
+	}
+
+	// Verify the config was captured
+	if mockClient.capturedConfig == nil {
+		t.Fatal("CreateSession was not called or config was not captured")
+	}
+
+	// Verify Model is set correctly
+	if mockClient.capturedConfig.Model != "test-model" {
+		t.Errorf("Expected Model to be 'test-model', got '%s'", mockClient.capturedConfig.Model)
+	}
+
+	// Verify Streaming is enabled
+	if !mockClient.capturedConfig.Streaming {
+		t.Error("Expected Streaming to be true")
+	}
+
+	// Verify SystemMessage is configured
+	if mockClient.capturedConfig.SystemMessage == nil {
+		t.Fatal("Expected SystemMessage to be set, got nil")
+	}
+
+	// Verify SystemMessage Mode
+	if mockClient.capturedConfig.SystemMessage.Mode != "append" {
+		t.Errorf("Expected SystemMessage.Mode to be 'append', got '%s'", mockClient.capturedConfig.SystemMessage.Mode)
+	}
+
+	// Verify SystemMessage Content
+	expectedContent := "Always format responses using markdown with code blocks."
+	if mockClient.capturedConfig.SystemMessage.Content != expectedContent {
+		t.Errorf("Expected SystemMessage.Content to be '%s', got '%s'", expectedContent, mockClient.capturedConfig.SystemMessage.Content)
+	}
+}
+
+// TestSetModelWithSystemMessage verifies that SetModel also includes the system message
+func TestSetModelWithSystemMessage(t *testing.T) {
+	mockClient := &mockClientWithConfigCapture{
+		mockClient: &mockClient{},
+	}
+	mgr := NewManagerWithClient(mockClient)
+
+	err := mgr.SetModel("new-model", 1.5)
+	if err != nil {
+		t.Fatalf("SetModel() unexpected error: %v", err)
+	}
+
+	// Verify the config was captured
+	if mockClient.capturedConfig == nil {
+		t.Fatal("CreateSession was not called or config was not captured")
+	}
+
+	// Verify SystemMessage is configured (SetModel calls Create internally)
+	if mockClient.capturedConfig.SystemMessage == nil {
+		t.Fatal("Expected SystemMessage to be set, got nil")
+	}
+
+	if mockClient.capturedConfig.SystemMessage.Mode != "append" {
+		t.Errorf("Expected SystemMessage.Mode to be 'append', got '%s'", mockClient.capturedConfig.SystemMessage.Mode)
+	}
+}

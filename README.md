@@ -278,12 +278,13 @@ Token usage is displayed in the prompt format:
 
 The CLI automatically renders markdown responses with beautiful formatting:
 
+- **Model-Level Formatting** - The AI model is instructed to always output markdown for consistent, high-quality responses
 - **Dark Theme** - Optimized for terminal readability
 - **Syntax Highlighting** - Code blocks with language-specific coloring (Go, Python, JavaScript, etc.)
 - **Real-time Streaming** - Markdown is rendered incrementally as responses arrive
 - **Formatted Elements** - Headers, lists, bold, italic, inline code, and links are properly styled
 
-The renderer buffers content intelligently to maintain the streaming feel while ensuring proper markdown formatting. No configuration needed—it works automatically!
+The system uses a dual approach: a system message instructs the model to format responses in markdown, while the streaming renderer ensures beautiful display. No configuration needed—it works automatically!
 
 ## Troubleshooting
 
